@@ -1,4 +1,3 @@
-import DesignSystem
 import Models
 import NetworkClient
 import SwiftUI
@@ -8,7 +7,6 @@ struct NotificationsPolicyView: View {
   @Environment(\.dismiss) private var dismiss
 
   @Environment(MastodonClient.self) private var client
-  @Environment(Theme.self) private var theme
 
   @State private var policy: NotificationsPolicy?
   @State private var isUpdating: Bool = false
@@ -31,7 +29,7 @@ struct NotificationsPolicyView: View {
           } label: {
             makePickerLabel(
               title: "notifications.content-filter.peopleYouDontFollow",
-              subtitle: "Until you manually approve them")
+              subtitle: "notifications.content-filter.peopleYouDontFollow.subtitle")
           }
 
           Picker(
@@ -48,7 +46,7 @@ struct NotificationsPolicyView: View {
           } label: {
             makePickerLabel(
               title: "notifications.content-filter.peopleNotFollowingYou",
-              subtitle: "And following you for less than 3 days")
+              subtitle: "notifications.content-filter.peopleNotFollowingYou.subtitle")
           }
 
           Picker(
@@ -65,7 +63,7 @@ struct NotificationsPolicyView: View {
           } label: {
             makePickerLabel(
               title: "notifications.content-filter.newAccounts",
-              subtitle: "Created within the past 30 days")
+              subtitle: "notifications.content-filter.newAccounts.subtitle")
           }
 
           Picker(
@@ -82,7 +80,7 @@ struct NotificationsPolicyView: View {
           } label: {
             makePickerLabel(
               title: "notifications.content-filter.privateMentions",
-              subtitle: "Unless it's in reply to your own mention or if you follow the sender")
+              subtitle: "notifications.content-filter.privateMentions.subtitle")
           }
 
           Picker(
@@ -99,28 +97,31 @@ struct NotificationsPolicyView: View {
           } label: {
             VStack(alignment: .leading) {
               makePickerLabel(
-                title: "Moderated accounts",
-                subtitle: "Limited by server moderators")
+                title: "notifications.content-filter.moderatedAccounts",
+                subtitle: "notifications.content-filter.moderatedAccounts.subtitle")
             }
           }
         }
-        #if !os(visionOS)
-          .listRowBackground(theme.primaryBackgroundColor.opacity(0.3))
-        #endif
       }
-      .formStyle(.grouped)
       .navigationTitle("notifications.content-filter.title")
       .navigationBarTitleDisplayMode(.inline)
       .scrollContentBackground(.hidden)
-      .toolbar { CloseToolbarItem() }
+      .toolbar {
+        ToolbarItem(placement: .navigationBarTrailing) {
+          Button {
+            dismiss()
+          } label: {
+            Text("action.done").bold()
+          }
+        }
+      }
       .disabled(policy == nil || isUpdating)
       .task {
         await getPolicy()
       }
       .redacted(reason: policy == nil ? .placeholder : [])
     }
-    .presentationDetents([.height(500)])
-    .presentationBackground(.thinMaterial)
+    .presentationDetents([.medium])
   }
 
   private var pickerMenu: some View {

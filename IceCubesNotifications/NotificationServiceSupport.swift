@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 
 extension NotificationService {
-  static func decrypt(
+  nonisolated static func decrypt(
     payload: Data, salt: Data, auth: Data, privateKey: P256.KeyAgreement.PrivateKey,
     publicKey: P256.KeyAgreement.PublicKey
   ) -> Data? {
@@ -42,14 +42,18 @@ extension NotificationService {
 
     let paddingLength = Int(plaintext[0]) * 256 + Int(plaintext[1])
     guard plaintext.count >= 2 + paddingLength else {
-      fatalError()
+      return nil
     }
     let unpadded = plaintext.suffix(from: paddingLength + 2)
 
     return Data(unpadded)
   }
 
-  private static func info(type: String, clientPublicKey: Data, serverPublicKey: Data) -> Data {
+  private nonisolated static func info(
+    type: String,
+    clientPublicKey: Data,
+    serverPublicKey: Data
+  ) -> Data {
     var info = Data()
 
     info.append("Content-Encoding: ".data(using: .utf8)!)

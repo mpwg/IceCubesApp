@@ -10,17 +10,17 @@ import SwiftUI
 @MainActor
 struct TimelineListView: View {
   @Environment(\.selectedTabScrollToTop) private var selectedTabScrollToTop
-  
+
   @Environment(MastodonClient.self) private var client
   @Environment(RouterPath.self) private var routerPath
   @Environment(Theme.self) private var theme
-  
+
   var viewModel: TimelineViewModel
   @Binding var timeline: TimelineFilter
   @Binding var pinnedFilters: [TimelineFilter]
   @Binding var selectedTagGroup: TagGroup?
   @Binding var scrollToIdAnimated: String?
-  
+
   var body: some View {
     @Bindable var viewModel = viewModel
     ScrollViewReader { proxy in
@@ -38,9 +38,17 @@ struct TimelineListView: View {
         switch viewModel.timeline {
         case .remoteLocal:
           StatusesListView(
-            fetcher: viewModel, client: client, routerPath: routerPath, isRemote: true)
+            fetcher: viewModel,
+            client: client,
+            routerPath: routerPath,
+            isRemote: true,
+            filterContext: timeline.filterContext)
         default:
-          StatusesListView(fetcher: viewModel, client: client, routerPath: routerPath)
+          StatusesListView(
+            fetcher: viewModel,
+            client: client,
+            routerPath: routerPath,
+            filterContext: timeline.filterContext)
             .environment(\.isHomeTimeline, timeline == .home)
         }
       }

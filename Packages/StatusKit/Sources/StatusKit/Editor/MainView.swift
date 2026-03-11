@@ -18,21 +18,40 @@ extension StatusEditor {
     @Environment(Theme.self) private var theme
 
     @State private var presentationDetent: PresentationDetent = .large
-    @State private var mainSEVM: ViewModel
-    @State private var followUpSEVMs: [ViewModel] = []
+    @State private var mainStore: EditorStore
+    @State private var followUpStores: [EditorStore] = []
     @State private var editingMediaContainer: MediaContainer?
     @State private var scrollID: UUID?
+    @State private var isMediaPanelPresented: Bool = false
+    @State private var lastEditorFocusState: EditorFocusState?
 
     @FocusState private var editorFocusState: EditorFocusState?
 
-    private var focusedSEVM: ViewModel {
+    private var focusedStore: EditorStore {
       if case .followUp(let id) = editorFocusState,
-        let sevm = followUpSEVMs.first(where: { $0.id == id })
+        let store = followUpStores.first(where: { $0.id == id })
       {
-        return sevm
+        return store
       }
 
-      return mainSEVM
+      return mainStore
+    }
+
+    public init(mode: EditorStore.Mode) {
+      _mainStore = State(initialValue: EditorStore(mode: mode))
+    }
+
+    public var body: some View {
+      @Bindable var focusedStore = focusedStore
+
+      NavigationStack {
+        mainContent(focusedStore: focusedStore)
+      }
+      .sheet(item: $editingMediaContainer) { container in
+        StatusEditor.MediaEditView(store: focusedStore, container: container)
+      }
+      .presentationDetents([.large, .height(230)], selection: $presentationDetent)
+      .presentationBackgroundInteraction(.enabled)
     }
 
     @ViewBuilder
@@ -43,145 +62,174 @@ extension StatusEditor {
       Color.clear
     }
 
-    public init(mode: ViewModel.Mode) {
-      _mainSEVM = State(initialValue: ViewModel(mode: mode))
+    @ViewBuilder
+    private func mainContent(focusedStore: EditorStore) -> some View {
+      editorScrollView(focusedStore: focusedStore)
     }
 
-    public var body: some View {
-      @Bindable var focusedSEVM = focusedSEVM
+    @ViewBuilder
+    private func editorScrollView(focusedStore: EditorStore) -> some View {
+      @Bindable var focusedStore = focusedStore
 
-      NavigationStack {
-        ZStack(alignment: .top) {
-          ScrollView {
-            VStackLayout(spacing: 0) {
-              EditorView(
-                viewModel: mainSEVM,
-                followUpSEVMs: $followUpSEVMs,
-                editingMediaContainer: $editingMediaContainer,
-                presentationDetent: $presentationDetent,
-                editorFocusState: $editorFocusState,
-                assignedFocusState: .main,
-                isMain: true
-              )
-              .id(mainSEVM.id)
-
-              ForEach(followUpSEVMs) { sevm in
-                @Bindable var sevm: ViewModel = sevm
-
-                EditorView(
-                  viewModel: sevm,
-                  followUpSEVMs: $followUpSEVMs,
-                  editingMediaContainer: $editingMediaContainer,
-                  presentationDetent: $presentationDetent,
-                  editorFocusState: $editorFocusState,
-                  assignedFocusState: .followUp(index: sevm.id),
-                  isMain: false
-                )
-                .id(sevm.id)
-              }
-            }
-            .scrollTargetLayout()
-          }
-          .scrollPosition(id: $scrollID, anchor: .top)
-          .animation(.bouncy(duration: 0.3), value: editorFocusState)
-          .animation(.bouncy(duration: 0.3), value: followUpSEVMs)
-          #if !os(visionOS)
-            .background(backgroundColor)
-          #endif
-          #if os(visionOS)
-            .ornament(attachmentAnchor: .scene(.leading)) {
-              AccessoryView(
-                focusedSEVM: focusedSEVM,
-                followUpSEVMs: $followUpSEVMs)
-            }
-          #else
-            .safeAreaInset(edge: .bottom) {
-              if presentationDetent == .large || presentationDetent == .medium {
-                if #available(iOS 26.0, *) {
-                  GlassEffectContainer(spacing: 10) {
-                    VStack(spacing: 10) {
-                      AutoCompleteView(viewModel: focusedSEVM)
-
-                      AccessoryView(
-                        focusedSEVM: focusedSEVM,
-                        followUpSEVMs: $followUpSEVMs)
-                    }
-                  }
-                  .padding(.bottom, 8)
-                } else {
-                  AccessoryView(
-                    focusedSEVM: focusedSEVM,
-                    followUpSEVMs: $followUpSEVMs)
-
-                  AutoCompleteView(viewModel: focusedSEVM)
-                }
-              }
-            }
-          #endif
-          .accessibilitySortPriority(1)  // Ensure that all elements inside the `ScrollView` occur earlier than the accessory views
-          .navigationTitle(focusedSEVM.mode.title)
-          .navigationBarTitleDisplayMode(.inline)
-          .toolbar {
-            ToolbarItems(
-              mainSEVM: mainSEVM,
-              focusedSEVM: focusedSEVM,
-              followUpSEVMs: followUpSEVMs)
-          }
-          .alert(
-            "status.error.posting.title",
-            isPresented: $focusedSEVM.showPostingErrorAlert,
-            actions: {
-              Button("OK") {}
-            },
-            message: {
-              Text(mainSEVM.postingError ?? "")
-            }
-          )
-          .interactiveDismissDisabled(mainSEVM.shouldDisplayDismissWarning)
-          .onChange(of: appAccounts.currentClient) { _, newValue in
-            if mainSEVM.mode.isInShareExtension {
-              currentAccount.setClient(client: newValue)
-              mainSEVM.client = newValue
-              for post in followUpSEVMs {
-                post.client = newValue
-              }
-            }
-          }
-          .onDrop(
-            of: [.image, .video, .gif, .mpeg4Movie, .quickTimeMovie, .movie],
-            delegate: focusedSEVM
-          )
-          .onChange(of: currentAccount.account?.id) {
-            mainSEVM.currentAccount = currentAccount.account
-            for p in followUpSEVMs {
-              p.currentAccount = mainSEVM.currentAccount
-            }
-          }
-          .onChange(of: mainSEVM.visibility) {
-            for p in followUpSEVMs {
-              p.visibility = mainSEVM.visibility
-            }
-          }
-          .onChange(of: followUpSEVMs.count) { oldValue, newValue in
-            if oldValue < newValue {
-              Task {
-                try? await Task.sleep(for: .seconds(0.1))
-                withAnimation(.bouncy(duration: 0.5)) {
-                  scrollID = followUpSEVMs.last?.id
-                }
-              }
-            }
-          }
-          if mainSEVM.isPosting {
-            ProgressView(value: mainSEVM.postingProgress, total: 100.0)
+      ScrollView {
+        editorStack
+      }
+      .scrollPosition(id: $scrollID, anchor: .top)
+      .animation(.bouncy(duration: 0.3), value: editorFocusState)
+      .animation(.bouncy(duration: 0.3), value: followUpStores)
+      #if !os(visionOS)
+        .background(backgroundColor)
+      #endif
+      #if os(visionOS)
+        .ornament(attachmentAnchor: .scene(.leading)) {
+          AccessoryView(
+            focusedStore: focusedStore,
+            followUpStores: $followUpStores,
+            isMediaPanelPresented: $isMediaPanelPresented)
+        }
+      #else
+        .safeAreaInset(edge: .bottom) {
+          bottomInset(focusedStore: focusedStore)
+        }
+      #endif
+      .accessibilitySortPriority(1)  // Ensure that all elements inside the `ScrollView` occur earlier than the accessory views
+      .navigationTitle(focusedStore.mode.title)
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItems(
+          mainStore: mainStore,
+          focusedStore: focusedStore,
+          followUpStores: followUpStores)
+      }
+      .alert(
+        "status.error.posting.title",
+        isPresented: $focusedStore.showPostingErrorAlert,
+        actions: {
+          Button("OK") {}
+        },
+        message: {
+          Text(mainStore.postingError ?? "")
+        }
+      )
+      .interactiveDismissDisabled(mainStore.shouldDisplayDismissWarning)
+      .onChange(of: appAccounts.currentClient) { _, newValue in
+        if mainStore.mode.isInShareExtension {
+          currentAccount.setClient(client: newValue)
+          mainStore.client = newValue
+          for post in followUpStores {
+            post.client = newValue
           }
         }
       }
-      .sheet(item: $editingMediaContainer) { container in
-        StatusEditor.MediaEditView(viewModel: focusedSEVM, container: container)
+      .onDrop(
+        of: [.image, .video, .gif, .mpeg4Movie, .quickTimeMovie, .movie],
+        delegate: focusedStore
+      )
+      .onChange(of: currentAccount.account?.id) {
+        mainStore.currentAccount = currentAccount.account
+        for p in followUpStores {
+          p.currentAccount = mainStore.currentAccount
+        }
       }
-      .presentationDetents([.large, .height(230)], selection: $presentationDetent)
-      .presentationBackgroundInteraction(.enabled)
+      .onChange(of: editorFocusState) { _, newValue in
+        if let newValue {
+          lastEditorFocusState = newValue
+          if isMediaPanelPresented {
+            isMediaPanelPresented = false
+          }
+        }
+      }
+      .onChange(of: isMediaPanelPresented) { _, newValue in
+        if newValue {
+          lastEditorFocusState = editorFocusState
+          editorFocusState = nil
+        } else if editorFocusState == nil {
+          editorFocusState = lastEditorFocusState ?? .main
+        }
+      }
+      .onChange(of: mainStore.visibility) {
+        for p in followUpStores {
+          p.visibility = mainStore.visibility
+        }
+      }
+      .onChange(of: followUpStores.count) { oldValue, newValue in
+        if oldValue < newValue {
+          Task {
+            try? await Task.sleep(for: .seconds(0.1))
+            withAnimation(.bouncy(duration: 0.5)) {
+              scrollID = followUpStores.last?.id
+            }
+          }
+        }
+      }
+    }
+
+    private var editorStack: some View {
+      VStackLayout(spacing: 0) {
+        EditorView(
+          store: mainStore,
+          followUpStores: $followUpStores,
+          editingMediaContainer: $editingMediaContainer,
+          presentationDetent: $presentationDetent,
+          editorFocusState: $editorFocusState,
+          assignedFocusState: .main,
+          isMain: true
+        )
+        .id(mainStore.id)
+
+        ForEach(followUpStores) { store in
+          @Bindable var store: EditorStore = store
+
+          EditorView(
+            store: store,
+            followUpStores: $followUpStores,
+            editingMediaContainer: $editingMediaContainer,
+            presentationDetent: $presentationDetent,
+            editorFocusState: $editorFocusState,
+            assignedFocusState: .followUp(index: store.id),
+            isMain: false
+          )
+          .id(store.id)
+        }
+      }
+      .scrollTargetLayout()
+    }
+
+    @ViewBuilder
+    private func bottomInset(focusedStore: EditorStore) -> some View {
+      if presentationDetent == .large || presentationDetent == .medium {
+        if #available(iOS 26.0, *) {
+          GlassEffectContainer(spacing: 10) {
+            VStack(spacing: 10) {
+              AutoCompleteView(store: focusedStore)
+
+              AccessoryView(
+                focusedStore: focusedStore,
+                followUpStores: $followUpStores,
+                isMediaPanelPresented: $isMediaPanelPresented
+              )
+              .padding(.bottom, isMediaPanelPresented ? 0 : 8)
+
+              if isMediaPanelPresented {
+                MediaPickerPanelView(store: focusedStore)
+              }
+            }
+          }
+        } else {
+          VStack(spacing: 0) {
+            AutoCompleteView(store: focusedStore)
+
+            AccessoryView(
+              focusedStore: focusedStore,
+              followUpStores: $followUpStores,
+              isMediaPanelPresented: $isMediaPanelPresented)
+
+            if isMediaPanelPresented {
+              MediaPickerPanelView(store: focusedStore)
+            }
+          }
+        }
+      }
     }
   }
 }

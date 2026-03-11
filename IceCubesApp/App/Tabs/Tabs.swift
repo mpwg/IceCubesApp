@@ -15,13 +15,14 @@ enum AppTab: Identifiable, Hashable, CaseIterable, Codable {
   case profile
   case bookmarks
   case favorites
+  case metrics
   case post
   case followedTags
   case lists
   case links
   case anyTimelineFilter(filter: TimelineFilter)
   
-  nonisolated var id: Int {
+  var id: Int {
     return switch self {
     case .timeline: 0
     case .notifications: 1
@@ -40,12 +41,13 @@ enum AppTab: Identifiable, Hashable, CaseIterable, Codable {
     case .followedTags: 14
     case .lists: 15
     case .links: 16
+    case .metrics: 17
     case .anyTimelineFilter(let filter):
       filter.hashValue
     }
   }
   
-  nonisolated static var allCases: [AppTab] {
+  static var allCases: [AppTab] {
     [.timeline,
       .notifications,
       .mentions,
@@ -59,6 +61,7 @@ enum AppTab: Identifiable, Hashable, CaseIterable, Codable {
       .profile,
       .bookmarks,
       .favorites,
+      .metrics,
       .post,
       .followedTags,
       .lists,
@@ -101,6 +104,8 @@ enum AppTab: Identifiable, Hashable, CaseIterable, Codable {
       self = .lists
     case 16:
       self = .links
+    case 17:
+      self = .metrics
     default:
       self = .other
     }
@@ -122,7 +127,7 @@ enum AppTab: Identifiable, Hashable, CaseIterable, Codable {
   ) -> some View {
     switch self {
     case let .anyTimelineFilter(filter):
-      TimelineTab(timeline: .constant(filter))
+      TimelineFilterTab(initialFilter: filter)
     case .timeline:
       TimelineTab(canFilterTimeline: true, timeline: homeTimeline, pinedFilters: pinnedFilters)
     case .trending:
@@ -150,6 +155,10 @@ enum AppTab: Identifiable, Hashable, CaseIterable, Codable {
     case .favorites:
       NavigationTab {
         AccountStatusesListView(mode: .favorites)
+      }
+    case .metrics:
+      NavigationTab {
+        AccountMetricsView()
       }
     case .followedTags:
       NavigationTab {
@@ -212,6 +221,8 @@ enum AppTab: Identifiable, Hashable, CaseIterable, Codable {
       "accessibility.tabs.profile.picker.bookmarks"
     case .favorites:
       "accessibility.tabs.profile.picker.favorites"
+    case .metrics:
+      "Metrics"
     case .post:
       "menu.new-post"
     case .followedTags:
@@ -253,6 +264,8 @@ enum AppTab: Identifiable, Hashable, CaseIterable, Codable {
       "bookmark"
     case .favorites:
       "star"
+    case .metrics:
+      "chart.bar"
     case .post:
       "square.and.pencil"
     case .followedTags:
@@ -264,6 +277,18 @@ enum AppTab: Identifiable, Hashable, CaseIterable, Codable {
     case .other:
       ""
     }
+  }
+}
+
+private struct TimelineFilterTab: View {
+  @State private var timeline: TimelineFilter
+
+  init(initialFilter: TimelineFilter) {
+    _timeline = State(initialValue: initialFilter)
+  }
+
+  var body: some View {
+    TimelineTab(timeline: $timeline)
   }
 }
 
@@ -309,7 +334,7 @@ enum SidebarSections: Int, Identifiable {
     case .activities:
       return [.notifications, .mentions, .messages]
     case .account:
-      return [.profile, .bookmarks, .favorites]
+      return [.profile, .bookmarks, .favorites, .metrics]
     case .app:
       return [.settings]
     case .loggedOutTabs:

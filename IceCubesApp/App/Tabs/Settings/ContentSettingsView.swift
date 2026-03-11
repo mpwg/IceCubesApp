@@ -28,6 +28,9 @@ struct ContentSettingsView: View {
         Toggle(isOn: $userPreferences.showAltTextForMedia) {
           Text("settings.content.media.show.alt")
         }
+        Toggle(isOn: $userPreferences.animateEmojis) {
+            Text("settings.other.animate-emojis")
+        }
       }
       #if !os(visionOS)
         .listRowBackground(theme.primaryBackgroundColor)
@@ -143,6 +146,12 @@ struct ContentSettingsView: View {
         }
         Toggle(isOn: $contentFilter.showQuotePosts) {
           Label("timeline.filter.show-quote", systemImage: "quote.bubble")
+        }
+        Toggle(isOn: $contentFilter.hidePostsWithMedia) {
+          Label("timeline.filter.hide-posts-with-media", systemImage: "photo.on.rectangle.angled")
+        }
+        Toggle(isOn: $contentFilter.hidePostsFromBots) {
+          Label("timeline.filter.hide-posts-from-bots", systemImage: "poweroutlet.type.b")
         }
       }
       #if !os(visionOS)

@@ -21,17 +21,38 @@ extension StatusEditor {
       @Environment(\.dismiss) private var dismiss
     #endif
 
+    let assignedFocusState: EditorFocusState
+    let isMain: Bool
+
     @Namespace private var transition
-    
-    @Bindable var viewModel: ViewModel
-    @Binding var followUpSEVMs: [ViewModel]
+
+    @Bindable var store: EditorStore
+    @Binding var followUpStores: [EditorStore]
     @Binding var editingMediaContainer: MediaContainer?
     @Binding var presentationDetent: PresentationDetent
 
     @FocusState<UUID?> var isSpoilerTextFocused: UUID?
     @FocusState<EditorFocusState?>.Binding var editorFocusState: EditorFocusState?
-    let assignedFocusState: EditorFocusState
-    let isMain: Bool
+
+    @State private var hasInitialized = false
+
+    init(
+      store: EditorStore,
+      followUpStores: Binding<[EditorStore]>,
+      editingMediaContainer: Binding<MediaContainer?>,
+      presentationDetent: Binding<PresentationDetent>,
+      editorFocusState: FocusState<EditorFocusState?>.Binding,
+      assignedFocusState: EditorFocusState,
+      isMain: Bool
+    ) {
+      self.store = store
+      _followUpStores = followUpStores
+      _editingMediaContainer = editingMediaContainer
+      _presentationDetent = presentationDetent
+      _editorFocusState = editorFocusState
+      self.assignedFocusState = assignedFocusState
+      self.isMain = isMain
+    }
 
     var body: some View {
       HStack(spacing: 0) {
@@ -50,7 +71,7 @@ extension StatusEditor {
             textInput
             pollView
             characterCountAndLangView
-            MediaView(viewModel: viewModel, editingMediaContainer: $editingMediaContainer)
+            MediaView(store: store, editingMediaContainer: $editingMediaContainer)
             embeddedStatus
           }
           .padding(.vertical)
@@ -62,14 +83,18 @@ extension StatusEditor {
         .background(presentationDetent == .large ? theme.primaryBackgroundColor : .clear)
       #endif
       .focused($editorFocusState, equals: assignedFocusState)
-      .onAppear { setupViewModel() }
+      .onAppear {
+        guard !hasInitialized else { return }
+        hasInitialized = true
+        setupStore()
+      }
     }
 
     @ViewBuilder
     private var spoilerTextView: some View {
-      if viewModel.spoilerOn {
-        TextField("status.editor.spoiler", text: $viewModel.spoilerText)
-          .focused($isSpoilerTextFocused, equals: viewModel.id)
+      if store.spoilerOn {
+        TextField("status.editor.spoiler", text: $store.spoilerText)
+          .focused($isSpoilerTextFocused, equals: store.id)
           .padding(.horizontal, .layoutPadding)
           .padding(.vertical)
           .background(theme.tintColor.opacity(0.20))
@@ -78,9 +103,9 @@ extension StatusEditor {
 
     @ViewBuilder
     private var accountHeaderView: some View {
-      if let account = currentAccount.account, !viewModel.mode.isEditing {
+      if let account = currentAccount.account, !store.mode.isEditing {
         HStack {
-          if viewModel.mode.isInShareExtension {
+          if store.mode.isInShareExtension {
             AppAccountsSelectorView(
               transition: transition,
               routerPath: RouterPath(),
@@ -94,7 +119,7 @@ extension StatusEditor {
 
           VStack(alignment: .leading, spacing: 4) {
             PrivacyMenu(
-              visibility: $viewModel.visibility, tint: isMain ? theme.tintColor : .secondary
+              visibility: $store.visibility, tint: isMain ? theme.tintColor : .secondary
             )
             .disabled(!isMain)
 
@@ -107,7 +132,7 @@ extension StatusEditor {
 
           if case .followUp(let id) = assignedFocusState {
             Button {
-              followUpSEVMs.removeAll { $0.id == id }
+              followUpStores.removeAll { $0.id == id }
             } label: {
               HStack {
                 Image(systemName: "minus.circle.fill").foregroundStyle(.red)
@@ -121,8 +146,8 @@ extension StatusEditor {
 
     private var textInput: some View {
       TextView(
-        $viewModel.statusText,
-        getTextView: { textView in viewModel.textView = textView }
+        store.statusTextBinding,
+        getTextView: { textView in store.textView = textView }
       )
       .placeholder(
         String(
@@ -136,7 +161,7 @@ extension StatusEditor {
 
     @ViewBuilder
     private var embeddedStatus: some View {
-      if let status = viewModel.replyToStatus {
+      if let status = store.replyToStatus {
         Divider().padding(.vertical, .statusComponentSpacing)
         StatusRowView(
           viewModel: .init(
@@ -162,7 +187,7 @@ extension StatusEditor {
           .padding(.layoutPadding)
         #endif
 
-      } else if let status = viewModel.embeddedStatus {
+      } else if let status = store.embeddedStatus {
         StatusEmbeddedView(status: status, client: client, routerPath: RouterPath())
           .padding(.horizontal, .layoutPadding)
           .disabled(true)
@@ -171,8 +196,8 @@ extension StatusEditor {
 
     @ViewBuilder
     private var pollView: some View {
-      if viewModel.showPoll {
-        PollView(viewModel: viewModel, showPoll: $viewModel.showPoll)
+      if store.showPoll {
+        PollView(store: store, showPoll: $store.showPoll)
           .padding(.horizontal)
       }
     }
@@ -181,7 +206,7 @@ extension StatusEditor {
     private var characterCountAndLangView: some View {
       HStack(alignment: .center) {
         if #available(iOS 26.0, *) {
-          LangButton(viewModel: viewModel)
+          LangButton(store: store)
             .glassEffect(.regular.interactive())
           pollButton
             .glassEffect(.regular.interactive())
@@ -192,7 +217,7 @@ extension StatusEditor {
             .padding(8)
             .glassEffect(.regular.interactive())
         } else {
-          LangButton(viewModel: viewModel)
+          LangButton(store: store)
           pollButton
           spoilerButton
           Spacer()
@@ -208,26 +233,26 @@ extension StatusEditor {
     private var pollButton: some View {
       Button {
         withAnimation {
-          viewModel.showPoll.toggle()
-          viewModel.resetPollDefaults()
+          store.showPoll.toggle()
+          store.resetPollDefaults()
         }
       } label: {
-        Image(systemName: viewModel.showPoll ? "chart.bar.fill" : "chart.bar")
+        Image(systemName: store.showPoll ? "chart.bar.fill" : "chart.bar")
       }
       .buttonStyle(.bordered)
       .accessibilityLabel("accessibility.editor.button.poll")
-      .disabled(viewModel.shouldDisablePollButton)
+      .disabled(store.shouldDisablePollButton)
     }
 
     private var spoilerButton: some View {
       Button {
         withAnimation {
-          viewModel.spoilerOn.toggle()
+          store.spoilerOn.toggle()
         }
-        isSpoilerTextFocused = viewModel.id
+        isSpoilerTextFocused = store.id
       } label: {
         Image(
-          systemName: viewModel.spoilerOn
+          systemName: store.spoilerOn
             ? "exclamationmark.triangle.fill" : "exclamationmark.triangle")
       }
       .buttonStyle(.bordered)
@@ -238,7 +263,7 @@ extension StatusEditor {
     private var characterCount: some View {
       let value =
         (currentInstance.instance?.configuration?.statuses.maxCharacters ?? 500)
-        + viewModel.statusTextCharacterLength
+        + store.statusTextCharacterLength
       Text("\(value)")
         .contentTransition(.numericText(value: Double(value)))
         .foregroundColor(value < 0 ? .red : .secondary)
@@ -251,13 +276,14 @@ extension StatusEditor {
         .animation(.smooth, value: value)
     }
 
-    private func setupViewModel() {
-      viewModel.client = client
-      viewModel.currentAccount = currentAccount.account
-      viewModel.theme = theme
-      viewModel.preferences = preferences
-      viewModel.currentInstance = currentInstance
-      viewModel.prepareStatusText()
+    private func setupStore() {
+      store.configureIfNeeded(
+        client: client,
+        currentAccount: currentAccount.account,
+        theme: theme,
+        preferences: preferences,
+        currentInstance: currentInstance
+      )
       if !client.isAuth {
         #if targetEnvironment(macCatalyst)
           dismissWindow()
@@ -267,7 +293,6 @@ extension StatusEditor {
         NotificationCenter.default.post(name: .shareSheetClose, object: nil)
       }
 
-      Task { await viewModel.fetchCustomEmojis() }
     }
   }
 }

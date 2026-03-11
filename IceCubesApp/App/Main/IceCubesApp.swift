@@ -28,6 +28,7 @@ struct IceCubesApp: App {
   @State var watcher = StreamWatcher.shared
   @State var quickLook = QuickLook.shared
   @State var theme = Theme.shared
+  @State var toastCenter = ToastCenter.shared
 
   @State var selectedTab: AppTab = .timeline
   @State var appRouterPath = RouterPath()
@@ -48,19 +49,6 @@ struct IceCubesApp: App {
   var body: some Scene {
     appScene
     otherScenes
-  }
-
-  func setNewClientsInEnv(client: MastodonClient) {
-    quickLook.namespace = namespace
-    currentAccount.setClient(client: client)
-    currentInstance.setClient(client: client)
-    userPreferences.setClient(client: client)
-    Task {
-      await currentInstance.fetchCurrentInstance()
-      watcher.setClient(
-        client: client, instanceStreamingURL: currentInstance.instance?.urls?.streamingApi)
-      watcher.watch(streams: [.user, .direct])
-    }
   }
 
   func handleScenePhase(scenePhase: ScenePhase) {
@@ -125,10 +113,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   func application(_: UIApplication, didReceiveRemoteNotification _: [AnyHashable: Any]) async
     -> UIBackgroundFetchResult
   {
-    UserPreferences.shared.reloadNotificationsCount(
-      tokens: AppAccountsManager.shared.availableAccounts.compactMap(\.oauthToken))
     return .noData
   }
+  
 
   func application(
     _: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession,

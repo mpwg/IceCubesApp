@@ -38,6 +38,17 @@ let package = Package(
         .product(name: "LRUCache", package: "LRUCache"),
       ],
       swiftSettings: [
+        .swiftLanguageMode(.v6),
+        .defaultIsolation(MainActor.self)
+      ]
+    ),
+    .testTarget(
+      name: "StatusKitTests",
+      dependencies: [
+        "StatusKit",
+        .product(name: "Models", package: "Models"),
+      ],
+      swiftSettings: [
         .swiftLanguageMode(.v6)
       ]
     )

@@ -15,6 +15,53 @@ import Timeline
 
 @MainActor
 extension View {
+  func withAppDependencyGraph(
+    appAccountsManager: AppAccountsManager,
+    currentAccount: CurrentAccount,
+    currentInstance: CurrentInstance,
+    userPreferences: UserPreferences,
+    theme: Theme,
+    watcher: StreamWatcher,
+    pushNotificationsService: PushNotificationsService,
+    appIntentService: AppIntentService,
+    quickLook: QuickLook,
+    toastCenter: ToastCenter,
+    namespace: Namespace.ID,
+    isSupporter: Bool
+  ) -> some View {
+    environment(appAccountsManager)
+      .environment(appAccountsManager.currentClient)
+      .environment(quickLook)
+      .environment(currentAccount)
+      .environment(currentInstance)
+      .environment(userPreferences)
+      .environment(theme)
+      .environment(watcher)
+      .environment(pushNotificationsService)
+      .environment(appIntentService)
+      .environment(toastCenter)
+      .environment(\.isSupporter, isSupporter)
+      .task(id: appAccountsManager.currentClient.id) {
+        let client = appAccountsManager.currentClient
+        quickLook.namespace = namespace
+        currentAccount.setClient(client: client)
+        currentInstance.setClient(client: client)
+        userPreferences.setClient(client: client)
+        await currentInstance.fetchCurrentInstance()
+        watcher.setClient(
+          client: client,
+          instanceStreamingURL: currentInstance.instance?.urls?.streamingApi)
+        if client.isAuth {
+          watcher.watch(streams: [.user, .direct])
+        } else {
+          watcher.stopWatching()
+        }
+      }
+      .task(id: appAccountsManager.pushAccounts.map(\.token)) {
+        pushNotificationsService.tokens = appAccountsManager.pushAccounts.map(\.token)
+      }
+  }
+
   func withAppRouter() -> some View {
     navigationDestination(for: RouterDestination.self) { destination in
       switch destination {
@@ -92,98 +139,107 @@ extension View {
         ConversationsListView()
       case .instanceInfo(let instance):
         InstanceInfoView(instance: instance)
+      case .metrics:
+        AccountMetricsView()
       }
     }
   }
 
-  func withSheetDestinations(sheetDestinations: Binding<SheetDestination?>) -> some View {
+  func withSheetDestinations(
+    sheetDestinations: Binding<SheetDestination?>,
+    routerPath: RouterPath
+  ) -> some View {
     sheet(item: sheetDestinations) { destination in
-      switch destination {
-      case .replyToStatusEditor(let status):
-        StatusEditor.MainView(mode: .replyTo(status: status))
-          .withEnvironments()
-      case .newStatusEditor(let visibility):
-        StatusEditor.MainView(mode: .new(text: nil, visibility: visibility))
-          .withEnvironments()
-      case .prefilledStatusEditor(let text, let visibility):
-        StatusEditor.MainView(mode: .new(text: text, visibility: visibility))
-          .withEnvironments()
-      case .imageURL(let urls, let caption, let altTexts, let visibility):
-        StatusEditor.MainView(
-          mode: .imageURL(urls: urls, caption: caption, altTexts: altTexts, visibility: visibility)
-        )
-        .withEnvironments()
-      case .editStatusEditor(let status):
-        StatusEditor.MainView(mode: .edit(status: status))
-          .withEnvironments()
-      case .quoteStatusEditor(let status):
-        StatusEditor.MainView(mode: .quote(status: status))
-          .withEnvironments()
-      case .quoteLinkStatusEditor(let link):
-        StatusEditor.MainView(mode: .quoteLink(link: link))
-          .withEnvironments()
-      case .mentionStatusEditor(let account, let visibility):
-        StatusEditor.MainView(mode: .mention(account: account, visibility: visibility))
-          .withEnvironments()
-      case .listCreate:
-        ListCreateView()
-          .withEnvironments()
-      case .listEdit(let list):
-        ListEditView(list: list)
-          .withEnvironments()
-      case .listAddAccount(let account):
-        ListAddAccountView(account: account)
-          .withEnvironments()
-      case .addAccount:
-        AddAccountView()
-          .withEnvironments()
-      case .addRemoteLocalTimeline:
-        AddRemoteTimelineView()
-          .withEnvironments()
-      case .addTagGroup:
-        EditTagGroupView()
-          .withEnvironments()
-      case .statusEditHistory(let status):
-        StatusEditHistoryView(statusId: status)
-          .withEnvironments()
-      case .settings:
-        SettingsTabs(isModal: true)
-          .withEnvironments()
-          .preferredColorScheme(Theme.shared.selectedScheme == .dark ? .dark : .light)
-      case .accountPushNotficationsSettings:
-        if let subscription = PushNotificationsService.shared.subscriptions.first(where: {
-          $0.account.token == AppAccountsManager.shared.currentAccount.oauthToken
-        }) {
-          NavigationSheet { PushNotificationsView(subscription: subscription) }
+      Group {
+        switch destination {
+        case .replyToStatusEditor(let status):
+          StatusEditor.MainView(mode: .replyTo(status: status))
             .withEnvironments()
-        } else {
-          EmptyView()
+        case .newStatusEditor(let visibility):
+          StatusEditor.MainView(mode: .new(text: nil, visibility: visibility))
+            .withEnvironments()
+        case .prefilledStatusEditor(let text, let visibility):
+          StatusEditor.MainView(mode: .new(text: text, visibility: visibility))
+            .withEnvironments()
+        case .imageURL(let urls, let caption, let altTexts, let visibility):
+          StatusEditor.MainView(
+            mode: .imageURL(
+              urls: urls, caption: caption, altTexts: altTexts, visibility: visibility)
+          )
+          .withEnvironments()
+        case .editStatusEditor(let status):
+          StatusEditor.MainView(mode: .edit(status: status))
+            .withEnvironments()
+        case .quoteStatusEditor(let status):
+          StatusEditor.MainView(mode: .quote(status: status))
+            .withEnvironments()
+        case .quoteLinkStatusEditor(let link):
+          StatusEditor.MainView(mode: .quoteLink(link: link))
+            .withEnvironments()
+        case .mentionStatusEditor(let account, let visibility):
+          StatusEditor.MainView(mode: .mention(account: account, visibility: visibility))
+            .withEnvironments()
+        case .listCreate:
+          ListCreateView()
+            .withEnvironments()
+        case .listEdit(let list):
+          ListEditView(list: list)
+            .withEnvironments()
+        case .listAddAccount(let account):
+          ListAddAccountView(account: account)
+            .withEnvironments()
+        case .addAccount:
+          AddAccountView()
+            .withEnvironments()
+        case .addRemoteLocalTimeline:
+          AddRemoteTimelineView()
+            .withEnvironments()
+        case .addTagGroup:
+          EditTagGroupView()
+            .withEnvironments()
+        case .statusEditHistory(let status):
+          StatusEditHistoryView(statusId: status)
+            .withEnvironments()
+        case .settings:
+          SettingsTabs(isModal: true)
+            .withEnvironments()
+            .preferredColorScheme(Theme.shared.selectedScheme == .dark ? .dark : .light)
+        case .accountPushNotficationsSettings:
+          if let subscription = PushNotificationsService.shared.subscriptions.first(where: {
+            $0.account.token == AppAccountsManager.shared.currentAccount.oauthToken
+          }) {
+            NavigationSheet { PushNotificationsView(subscription: subscription) }
+              .withEnvironments()
+          } else {
+            EmptyView()
+          }
+        case .about:
+          NavigationSheet { AboutView() }
+            .withEnvironments()
+        case .support:
+          NavigationSheet { SupportAppView() }
+            .withEnvironments()
+        case .report(let status):
+          ReportView(status: status)
+            .withEnvironments()
+        case .shareImage(let image, let status):
+          ActivityView(image: image, status: status)
+            .withEnvironments()
+        case .editTagGroup(let tagGroup, let onSaved):
+          EditTagGroupView(tagGroup: tagGroup, onSaved: onSaved)
+            .withEnvironments()
+        case .timelineContentFilter:
+          TimelineContentFilterView()
+            .withEnvironments()
+        case .accountEditInfo:
+          EditAccountView()
+            .withEnvironments()
+        case .accountFiltersList:
+          FiltersListView()
+            .withEnvironments()
         }
-      case .about:
-        NavigationSheet { AboutView() }
-          .withEnvironments()
-      case .support:
-        NavigationSheet { SupportAppView() }
-          .withEnvironments()
-      case .report(let status):
-        ReportView(status: status)
-          .withEnvironments()
-      case .shareImage(let image, let status):
-        ActivityView(image: image, status: status)
-          .withEnvironments()
-      case .editTagGroup(let tagGroup, let onSaved):
-        EditTagGroupView(tagGroup: tagGroup, onSaved: onSaved)
-          .withEnvironments()
-      case .timelineContentFilter:
-        TimelineContentFilterView()
-          .withEnvironments()
-      case .accountEditInfo:
-        EditAccountView()
-          .withEnvironments()
-      case .accountFiltersList:
-        FiltersListView()
-          .withEnvironments()
       }
+      .environment(routerPath)
     }
   }
 
@@ -196,6 +252,7 @@ extension View {
       .environment(PushNotificationsService.shared)
       .environment(AppAccountsManager.shared.currentClient)
       .environment(QuickLook.shared)
+      .environment(ToastCenter.shared)
   }
 
   func withModelContainer() -> some View {
@@ -204,6 +261,7 @@ extension View {
       LocalTimeline.self,
       TagGroup.self,
       RecentTag.self,
+      MetricsNotificationGroup.self,
     ])
   }
 }

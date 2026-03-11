@@ -21,6 +21,7 @@ let package = Package(
     .package(name: "Models", path: "../Models"),
     .package(name: "StatusKit", path: "../StatusKit"),
     .package(name: "Env", path: "../Env"),
+    .package(name: "DesignSystem", path: "../DesignSystem"),
     .package(url: "https://github.com/Dean151/ButtonKit", from: "0.6.1"),
     .package(url: "https://github.com/dkk/WrappingHStack", from: "2.2.11"),
   ],
@@ -32,11 +33,13 @@ let package = Package(
         .product(name: "Models", package: "Models"),
         .product(name: "StatusKit", package: "StatusKit"),
         .product(name: "Env", package: "Env"),
+        .product(name: "DesignSystem", package: "DesignSystem"),
         .product(name: "ButtonKit", package: "ButtonKit"),
         .product(name: "WrappingHStack", package: "WrappingHStack"),
       ],
       swiftSettings: [
-        .swiftLanguageMode(.v6)
+        .swiftLanguageMode(.v6),
+        .defaultIsolation(MainActor.self)
       ]
     ),
     .testTarget(

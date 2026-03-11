@@ -12,7 +12,7 @@ extension StatusEditor {
     @Environment(CurrentInstance.self) private var currentInstance
     @Environment(UserPreferences.self) private var preferences
 
-    var viewModel: ViewModel
+    var store: EditorStore
     let container: StatusEditor.MediaContainer
 
     @State private var imageDescription: String = ""
@@ -44,6 +44,18 @@ extension StatusEditor {
                 translateButton
               }
             #endif
+          } footer: {
+            HStack(spacing: 4) {
+              Text("Use OpenAI API -")
+              Link(
+                "Review Privacy Policy",
+                destination: URL(
+                  string: "https://github.com/Dimillian/IceCubesApp/blob/main/PRIVACY.MD"
+                )!
+              )
+            }
+            .font(.footnote)
+            .foregroundStyle(.secondary)
           }
           .listRowBackground(theme.primaryBackgroundColor)
           Section {
@@ -83,16 +95,16 @@ extension StatusEditor {
             Button {
               if !imageDescription.isEmpty {
                 isUpdating = true
-                if currentInstance.isEditAltTextSupported, viewModel.mode.isEditing {
+                if currentInstance.isEditAltTextSupported, store.mode.isEditing {
                   Task {
-                    await viewModel.editDescription(
+                    await store.editDescription(
                       container: container, description: imageDescription)
                     dismiss()
                     isUpdating = false
                   }
                 } else {
                   Task {
-                    await viewModel.addDescription(
+                    await store.addDescription(
                       container: container, description: imageDescription)
                     dismiss()
                     isUpdating = false
@@ -117,17 +129,19 @@ extension StatusEditor {
     @ViewBuilder
     private var generateButton: some View {
       if let url = container.mediaAttachment?.url {
-        Button {
-          Task {
-            if let description = await generateDescription(url: url) {
-              imageDescription = description
+        VStack(alignment: .leading, spacing: 4) {
+          Button {
+            Task {
+              if let description = await generateDescription(url: url) {
+                imageDescription = description
+              }
             }
-          }
-        } label: {
-          if isGeneratingDescription {
-            ProgressView()
-          } else {
-            Text("status.editor.media.generate-description")
+          } label: {
+            if isGeneratingDescription {
+              ProgressView()
+            } else {
+              Text("status.editor.media.generate-description")
+            }
           }
         }
       }

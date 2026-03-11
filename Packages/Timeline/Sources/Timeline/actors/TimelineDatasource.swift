@@ -4,6 +4,7 @@ import Models
 
 actor TimelineDatasource {
   private var items: [TimelineItem] = []
+  private var filterContext: Filter.Context?
 
   var isEmpty: Bool {
     items.isEmpty
@@ -24,10 +25,11 @@ actor TimelineDatasource {
 
   func getFiltered() async -> [Status] {
     let contentFilter = await TimelineContentFilter.shared
+    let snapshot = await contentFilter.snapshot()
     var filtered: [Status] = []
     for item in items {
       guard case .status(let status) = item else { continue }
-      if await shouldShowStatus(status, filter: contentFilter) {
+      if shouldShowStatus(status, filter: snapshot) {
         filtered.append(status)
       }
     }
@@ -36,15 +38,27 @@ actor TimelineDatasource {
 
   func getFilteredItems() async -> [TimelineItem] {
     let contentFilter = await TimelineContentFilter.shared
+    let snapshot = await contentFilter.snapshot()
     var filtered: [TimelineItem] = []
     for item in items {
       switch item {
       case .gap:
         filtered.append(item)
       case .status(let status):
-        if await shouldShowStatus(status, filter: contentFilter) {
+        if shouldShowStatus(status, filter: snapshot) {
           filtered.append(item)
         }
+      }
+    }
+    return filtered
+  }
+
+  func getFiltered(using snapshot: TimelineContentFilter.Snapshot) -> [Status] {
+    var filtered: [Status] = []
+    for item in items {
+      guard case .status(let status) = item else { continue }
+      if shouldShowStatus(status, filter: snapshot) {
+        filtered.append(status)
       }
     }
     return filtered
@@ -56,6 +70,10 @@ actor TimelineDatasource {
 
   func reset() {
     items = []
+  }
+
+  func setFilterContext(_ context: Filter.Context?) {
+    filterContext = context
   }
 
   // MARK: - Status Finding Helpers
@@ -155,17 +173,32 @@ actor TimelineDatasource {
 
   // MARK: - Private Helpers
 
-  private func shouldShowStatus(_ status: Status, filter: TimelineContentFilter) async -> Bool {
-    let showReplies = await filter.showReplies
-    let showBoosts = await filter.showBoosts
-    let showThreads = await filter.showThreads
-    let showQuotePosts = await filter.showQuotePosts
+  private func shouldShowStatus(_ status: Status, filter: TimelineContentFilter.Snapshot) -> Bool {
+    let isHidden = if let filterContext {
+      status.isHidden(in: filterContext)
+    } else {
+      status.isHidden
+    }
+    let showReplies = filter.showReplies
+    let showBoosts = filter.showBoosts
+    let showThreads = filter.showThreads
+    let showQuotePosts = filter.showQuotePosts
+    let hasQuote = status.quote?.quotedStatusId != nil
+      || status.quote?.quotedStatus != nil
+      || status.reblog?.quote?.quotedStatusId != nil
+      || status.reblog?.quote?.quotedStatus != nil
+    let hasLegacyQuoteLink = !status.content.statusesURLs.isEmpty
+      || !(status.reblog?.content.statusesURLs.isEmpty ?? true)
 
-    return !status.isHidden
+    let isBotAuthored = status.reblog?.account.bot ?? status.account.bot
+
+    return !isHidden
       && (showReplies || status.inReplyToId == nil
         || status.inReplyToAccountId == status.account.id)
       && (showBoosts || status.reblog == nil)
       && (showThreads || status.inReplyToAccountId != status.account.id)
-      && (showQuotePosts || status.content.statusesURLs.isEmpty)
+      && (showQuotePosts || (!hasQuote && !hasLegacyQuoteLink))
+      && (!filter.hidePostsWithMedia || status.mediaAttachments.isEmpty)
+      && !(filter.hidePostsFromBots && isBotAuthored)
   }
 }

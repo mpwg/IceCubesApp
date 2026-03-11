@@ -34,11 +34,14 @@ class ShareViewController: UIViewController {
           .environment(account)
           .environment(theme)
           .environment(instance)
+          .environment(RouterPath())
+          .environment(ToastCenter.shared)
           .modelContainer(for: [
             Draft.self,
             LocalTimeline.self,
             TagGroup.self,
             RecentTag.self,
+            MetricsNotificationGroup.self,
           ])
           .tint(theme.tintColor)
           .preferredColorScheme(colorScheme == .light ? .light : .dark)

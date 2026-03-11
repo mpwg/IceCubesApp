@@ -22,7 +22,6 @@ struct AppView: View {
   @Environment(AppAccountsManager.self) private var appAccountsManager
   @Environment(UserPreferences.self) private var userPreferences
   @Environment(Theme.self) private var theme
-  @Environment(StreamWatcher.self) private var watcher
   @Environment(CurrentAccount.self) private var currentAccount
 
   @Binding var selectedTab: AppTab
@@ -40,7 +39,7 @@ struct AppView: View {
   var body: some View {
     HStack(spacing: 0) {
       tabBarView
-          .tabViewStyle(.sidebarAdaptable)
+        .tabViewStyle(.sidebarAdaptable)
       if horizontalSizeClass == .regular
         && (UIDevice.current.userInterfaceIdiom == .pad
           || UIDevice.current.userInterfaceIdiom == .mac),
@@ -91,8 +90,7 @@ struct AppView: View {
               let tab = AppTab.anyTimelineFilter(
                 filter: .remoteLocal(server: timeline.instance, filter: .local))
               Tab(value: tab) {
-                tab.makeContentView(
-                  homeTimeline: $timeline, selectedTab: $selectedTab, pinnedFilters: $pinnedFilters)
+                makeTabContent(for: tab)
               } label: {
                 tab.label.environment(\.symbolVariants, tab == selectedTab ? .fill : .none)
               }
@@ -106,8 +104,7 @@ struct AppView: View {
                   tags: tagGroup.tags,
                   symbolName: tagGroup.symbolName))
               Tab(value: tab) {
-                tab.makeContentView(
-                  homeTimeline: $timeline, selectedTab: $selectedTab, pinnedFilters: $pinnedFilters)
+                makeTabContent(for: tab)
               } label: {
                 tab.label.environment(\.symbolVariants, tab == selectedTab ? .fill : .none)
               }
@@ -116,8 +113,7 @@ struct AppView: View {
           } else {
             ForEach(section.tabs) { tab in
               Tab(value: tab, role: tab == .explore ? .search : .none) {
-                tab.makeContentView(
-                  homeTimeline: $timeline, selectedTab: $selectedTab, pinnedFilters: $pinnedFilters)
+                makeTabContent(for: tab)
               } label: {
                 tab.label.environment(\.symbolVariants, tab == selectedTab ? .fill : .none)
               }
@@ -130,8 +126,23 @@ struct AppView: View {
       }
     }
     .id(appAccountsManager.currentClient.id)
-    .withSheetDestinations(sheetDestinations: $appRouterPath.presentedSheet)
+    .withSheetDestinations(
+      sheetDestinations: $appRouterPath.presentedSheet,
+      routerPath: appRouterPath
+    )
     .environment(\.selectedTabScrollToTop, selectedTabScrollToTop)
+  }
+
+  @ViewBuilder
+  private func makeTabContent(for tab: AppTab) -> some View {
+    tab.makeContentView(
+      homeTimeline: $timeline,
+      selectedTab: $selectedTab,
+      pinnedFilters: $pinnedFilters
+    )
+    .overlay(alignment: .top) {
+      ToastOverlayView()
+    }
   }
 
   private func updateTab(with newTab: AppTab) {
@@ -165,7 +176,7 @@ struct AppView: View {
     if tab == .notifications, selectedTab != tab,
       let token = appAccountsManager.currentAccount.oauthToken
     {
-      return watcher.unreadNotificationsCount + (userPreferences.notificationsCount[token] ?? 0)
+      return userPreferences.notificationsCount[token] ?? 0
     }
     return 0
   }
